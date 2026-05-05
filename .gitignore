@@ -1,3 +1,6 @@
 .vbcignore
 .vbc/
 git-contribution-fixer*
+developer_notes.md
+context.md
+.whatson*
