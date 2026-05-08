@@ -1,10 +1,14 @@
 #!/bin/bash
 
 # ============================================================
-#   fix_commits.sh  v3.0
+#   fix_commits.sh  v4.0
 #   Git Commit Email Fix Tool — multi-repo
-#   Uses git-filter-repo (modern replacement for filter-branch)
-#   Part of: git-identity-fixer toolkit
+#   Features:
+#   • Dry Run
+#   • Detailed Report
+#   • Allowlist for valid extra emails/users
+#   • Skip forked/cloned repos
+#   • Uses git-filter-repo
 # ============================================================
 
 RED='\033[0;31m'
@@ -17,7 +21,7 @@ RESET='\033[0m'
 
 echo -e "${BOLD}"
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║         fix_commits.sh  v3.0                         ║"
+echo "║         fix_commits.sh  v4.0                         ║"
 echo "║         Git Commit Email Fix Tool                    ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo -e "${RESET}"
@@ -25,81 +29,115 @@ echo -e "${RESET}"
 # ── Check git-filter-repo ────────────────────────────────────
 if ! command -v git-filter-repo &>/dev/null; then
   echo -e "${RED}❌ git-filter-repo not found.${RESET}"
-  echo -e "   Install it first:"
+  echo -e "   Install using:"
   echo -e "   ${DIM}sudo apt install git-filter-repo${RESET}"
   exit 1
 fi
 
 # ── Inputs ───────────────────────────────────────────────────
-read -p "  Enter base directory path (e.g. /mnt/d/git): " BASE_PATH
+read -p "  Enter base directory path: " BASE_PATH
 read -p "  Enter your GitHub username: " GITHUB_USERNAME
 read -p "  Enter correct GitHub email: " CORRECT_EMAIL
-read -p "  Enter your correct name: " CORRECT_NAME
+read -p "  Enter correct Git author name: " CORRECT_NAME
 
 echo ""
-echo -e "  ${DIM}Old email to replace (leave blank to fix ALL emails → correct one):${RESET}"
-read -p "  Old email [Enter to fix all]: " OLD_EMAIL
+echo -e "  ${DIM}Old email to replace (leave blank to fix ALL emails):${RESET}"
+read -p "  Old email: " OLD_EMAIL
 
-if [ -n "$OLD_EMAIL" ]; then
-  echo -e "  ${CYAN}ℹ️  Mode: Targeted — replacing only: ${BOLD}$OLD_EMAIL${RESET}"
-else
-  echo -e "  ${CYAN}ℹ️  Mode: Fix-all — replacing every email that isn't: ${BOLD}$CORRECT_EMAIL${RESET}"
+# ── Allowlist Feature ────────────────────────────────────────
+echo ""
+read -p "  Add trusted emails/users to allowlist? (y/n): " ADD_ALLOW
+
+ALLOWLIST_EMAILS=()
+ALLOWLIST_NAMES=()
+
+if [ "$ADD_ALLOW" = "y" ]; then
+
+  echo ""
+  echo -e "  ${CYAN}Enter trusted identities.${RESET}"
+  echo -e "  ${DIM}Example:${RESET}"
+  echo "    Ubuntu"
+  echo "    ubuntu@ip-172-31-21-116.eu-north-1.compute.internal"
+  echo ""
+
+  while true; do
+
+    read -p "  Trusted author name (leave blank to stop): " TMP_NAME
+
+    if [ -z "$TMP_NAME" ]; then
+      break
+    fi
+
+    read -p "  Trusted email: " TMP_EMAIL
+
+    ALLOWLIST_NAMES+=("$TMP_NAME")
+    ALLOWLIST_EMAILS+=("$TMP_EMAIL")
+
+    echo -e "  ${GREEN}✅ Added to allowlist${RESET}"
+    echo ""
+  done
 fi
+
+# ── Skip Fork/Cloned Repo Option ─────────────────────────────
+echo ""
+read -p "  Skip forked/cloned repos not owned by you? (y/n): " SKIP_FOREIGN
 
 # ── Dry Run ──────────────────────────────────────────────────
 echo ""
-read -p "  Dry run first? Shows what would change without modifying anything (y/n): " DRY_RUN_CHOICE
+read -p "  Dry run first? (y/n): " DRY_RUN_INPUT
 
-if [ "$DRY_RUN_CHOICE" = "y" ]; then
+if [ "$DRY_RUN_INPUT" = "y" ]; then
   DRY_RUN=true
-  echo -e "  ${YELLOW}⚠️  Dry-run mode enabled — no changes will be made${RESET}"
+  echo -e "  ${YELLOW}⚠️ Dry-run mode enabled${RESET}"
 else
   DRY_RUN=false
 fi
 
 BASE_PATH="${BASE_PATH%/}"
 
-# ── Report File ──────────────────────────────────────────────
 REPORT_FILE="$BASE_PATH/fix_commits_report_$(date +%Y%m%d_%H%M%S).txt"
 
 {
-  echo "fix_commits Report v3.0"
+  echo "fix_commits Report v4.0"
   echo "Generated : $(date)"
   echo "Base Path : $BASE_PATH"
-  echo "GitHub User : $GITHUB_USERNAME"
+  echo "GitHub Username : $GITHUB_USERNAME"
   echo "Correct Email : $CORRECT_EMAIL"
   echo "Correct Name  : $CORRECT_NAME"
   echo "Dry Run : $DRY_RUN"
+  echo ""
+
+  echo "Trusted Allowlist:"
+  for i in "${!ALLOWLIST_EMAILS[@]}"; do
+    echo "  ${ALLOWLIST_NAMES[$i]} <${ALLOWLIST_EMAILS[$i]}>"
+  done
+
+  echo ""
   echo "=================================================="
   echo ""
 } > "$REPORT_FILE"
 
-# ── Enforce Global Git Config ────────────────────────────────
-CURRENT_GLOBAL_EMAIL=$(git config --global user.email 2>/dev/null)
+# ── Check Global Git Config ──────────────────────────────────
+CURRENT_EMAIL=$(git config --global user.email 2>/dev/null)
 
-if [ "$CURRENT_GLOBAL_EMAIL" != "$CORRECT_EMAIL" ]; then
+if [ "$CURRENT_EMAIL" != "$CORRECT_EMAIL" ]; then
 
-  echo -e "\n${YELLOW}⚠️  Global git email mismatch${RESET}"
-  echo -e "  Current : ${DIM}${CURRENT_GLOBAL_EMAIL:-not set}${RESET}"
-  echo -e "  Expected: ${DIM}$CORRECT_EMAIL${RESET}"
+  echo ""
+  echo -e "${YELLOW}⚠️ Global Git email mismatch${RESET}"
+  echo "Current : ${CURRENT_EMAIL:-not set}"
+  echo "Expected: $CORRECT_EMAIL"
 
-  read -p "  Update global Git config now? (y/n): " choice
+  read -p "Update global Git config? (y/n): " UPDATE_GLOBAL
 
-  if [ "$choice" = "y" ]; then
+  if [ "$UPDATE_GLOBAL" = "y" ]; then
+
     git config --global user.email "$CORRECT_EMAIL"
     git config --global user.name "$CORRECT_NAME"
 
-    echo -e "  ${GREEN}✅ Global Git config updated${RESET}"
-
-    {
-      echo "Global Git Config Updated"
-      echo "New user.name  : $CORRECT_NAME"
-      echo "New user.email : $CORRECT_EMAIL"
-      echo ""
-    } >> "$REPORT_FILE"
+    echo -e "${GREEN}✅ Global Git config updated${RESET}"
 
   else
-    echo -e "  ${RED}❌ Aborted — fix global config first${RESET}"
+    echo -e "${RED}❌ Aborted${RESET}"
     exit 1
   fi
 fi
@@ -124,50 +162,75 @@ for repo in */; do
     continue
   fi
 
-  echo -e "\n${CYAN}🔍 $repo${RESET}"
+  echo ""
+  echo -e "${CYAN}🔍 $repo${RESET}"
 
   cd "$repo" || continue
 
   REMOTE_URL=$(git remote get-url origin 2>/dev/null)
+  CURRENT_BRANCH=$(git branch --show-current)
 
   {
-    echo "Repo : $repo"
+    echo "Repo   : $repo"
     echo "Remote : $REMOTE_URL"
-    echo "Branch : $(git branch --show-current)"
+    echo "Branch : $CURRENT_BRANCH"
   } >> "../$(basename "$REPORT_FILE")"
 
-  # ── Skip non-user repos ───────────────────────────────────
-  if [[ "$REMOTE_URL" != *"$GITHUB_USERNAME"* ]]; then
+  # ── Skip Foreign Repos ────────────────────────────────────
+  if [ "$SKIP_FOREIGN" = "y" ]; then
 
-    echo -e "  ${DIM}⏭️  Skipping — not owned by user${RESET}"
+    if [[ "$REMOTE_URL" != *"$GITHUB_USERNAME"* ]]; then
 
-    {
-      echo "STATUS : SKIPPED"
-      echo "Reason : Remote does not match username"
-      echo "--------------------------------------------------"
-      echo ""
-    } >> "../$(basename "$REPORT_FILE")"
+      echo -e "  ${DIM}⏭️ Skipped (not owned by user)${RESET}"
 
-    ((SKIPPED++))
-    cd ..
-    continue
+      {
+        echo "STATUS : SKIPPED"
+        echo "Reason : Foreign repo"
+        echo "--------------------------------------------------"
+        echo ""
+      } >> "../$(basename "$REPORT_FILE")"
+
+      ((SKIPPED++))
+      cd ..
+      continue
+    fi
   fi
 
-  # ── Count commits needing fixes ───────────────────────────
+  # ── Create Temporary Email Ignore File ────────────────────
+  TEMP_ALLOWED=$(mktemp)
+
+  echo "$CORRECT_EMAIL" >> "$TEMP_ALLOWED"
+
+  for email in "${ALLOWLIST_EMAILS[@]}"; do
+    echo "$email" >> "$TEMP_ALLOWED"
+  done
+
+  # ── Count Invalid Commits ─────────────────────────────────
   if [ -n "$OLD_EMAIL" ]; then
-    COUNT=$(git log --pretty=format:"%ae" 2>/dev/null | grep -cxF "$OLD_EMAIL")
+
+    COUNT=$(git log --pretty=format:"%ae" | grep -cxF "$OLD_EMAIL")
+
   else
-    COUNT=$(git log --pretty=format:"%ae" 2>/dev/null | grep -cvxF "$CORRECT_EMAIL")
+
+    COUNT=0
+
+    while read -r email; do
+
+      if ! grep -qxF "$email" "$TEMP_ALLOWED"; then
+        ((COUNT++))
+      fi
+
+    done < <(git log --pretty=format:"%ae")
   fi
 
-  TOTAL_COMMITS=$(git rev-list --count HEAD 2>/dev/null)
+  TOTAL_COMMITS=$(git rev-list --count HEAD)
 
   {
     echo "Total Commits : $TOTAL_COMMITS"
     echo "Commits To Fix: $COUNT"
     echo ""
     echo "Email Distribution:"
-    git log --pretty=format:"%ae" 2>/dev/null | sort | uniq -c
+    git log --pretty=format:"%ae" | sort | uniq -c
     echo ""
   } >> "../$(basename "$REPORT_FILE")"
 
@@ -183,33 +246,38 @@ for repo in */; do
     } >> "../$(basename "$REPORT_FILE")"
 
     ((CLEAN++))
+
+    rm -f "$TEMP_ALLOWED"
+
     cd ..
     continue
   fi
 
-  echo -e "  ${YELLOW}⚠️  $COUNT commit(s) need fixing${RESET}"
+  echo -e "  ${YELLOW}⚠️ $COUNT commit(s) need fixing${RESET}"
 
   ((TOTAL_COMMITS_FIXED += COUNT))
 
-  # ── Preview affected commits ──────────────────────────────
-  echo -e "  ${DIM}Affected commits (up to 5):${RESET}"
+  echo -e "  ${DIM}Affected commits:${RESET}"
+
+  PREVIEW=""
+
+  while read -r line; do
+
+    EMAIL=$(echo "$line" | awk -F'|' '{print $3}' | xargs)
+
+    if ! grep -qxF "$EMAIL" "$TEMP_ALLOWED"; then
+      PREVIEW="${PREVIEW}${line}\n"
+    fi
+
+  done < <(git log --pretty=format:"%h | %an | %ae | %ad" --date=iso | head -20)
+
+  echo -e "$PREVIEW" | head -5
 
   {
     echo "Affected Commits:"
+    echo -e "$PREVIEW" | head -10
+    echo ""
   } >> "../$(basename "$REPORT_FILE")"
-
-  if [ -n "$OLD_EMAIL" ]; then
-
-    PREVIEW=$(git log --pretty=format:"%h | %an | %ae | %ad" --date=iso 2>/dev/null | grep "$OLD_EMAIL" | head -5)
-
-  else
-
-    PREVIEW=$(git log --pretty=format:"%h | %an | %ae | %ad" --date=iso 2>/dev/null | grep -v "$CORRECT_EMAIL" | head -5)
-
-  fi
-
-  echo "$PREVIEW"
-  echo "$PREVIEW" >> "../$(basename "$REPORT_FILE")"
 
   # ── Dry Run ───────────────────────────────────────────────
   if [ "$DRY_RUN" = true ]; then
@@ -217,12 +285,13 @@ for repo in */; do
     echo -e "  ${YELLOW}[DRY RUN] Would rewrite $COUNT commit(s) and force-push${RESET}"
 
     {
-      echo ""
       echo "STATUS : DRY RUN"
-      echo "Action : Would rewrite and force-push"
+      echo "Action : Would rewrite history"
       echo "--------------------------------------------------"
       echo ""
     } >> "../$(basename "$REPORT_FILE")"
+
+    rm -f "$TEMP_ALLOWED"
 
     cd ..
     continue
@@ -239,10 +308,12 @@ for repo in */; do
 
   else
 
-    git log --pretty=format:"%ae" 2>/dev/null | \
-    grep -vxF "$CORRECT_EMAIL" | \
-    sort -u | while read -r bad_email; do
-      echo "$CORRECT_NAME <$CORRECT_EMAIL> <$bad_email>"
+    git log --pretty=format:"%ae" | sort -u | while read -r bad_email; do
+
+      if ! grep -qxF "$bad_email" "$TEMP_ALLOWED"; then
+        echo "$CORRECT_NAME <$CORRECT_EMAIL> <$bad_email>"
+      fi
+
     done > "$MAILMAP_FILE"
 
   fi
@@ -250,19 +321,20 @@ for repo in */; do
   git filter-repo --mailmap "$MAILMAP_FILE" --force > /tmp/gitfix_output.txt 2>&1
 
   rm -f "$MAILMAP_FILE"
+  rm -f "$TEMP_ALLOWED"
 
-  git remote add origin "$REMOTE_URL" 2>/dev/null || git remote set-url origin "$REMOTE_URL"
+  git remote add origin "$REMOTE_URL" 2>/dev/null || \
+  git remote set-url origin "$REMOTE_URL"
 
   echo -e "  ${CYAN}🚀 Force pushing...${RESET}"
 
   if git push --force 2>&1; then
 
-    echo -e "  ${GREEN}✅ Fixed & pushed: $repo${RESET}"
+    echo -e "  ${GREEN}✅ Fixed & pushed${RESET}"
 
     {
-      echo ""
       echo "STATUS : FIXED"
-      echo "Action : History rewritten and pushed"
+      echo "Action : History rewritten"
       echo "Commits Fixed : $COUNT"
       echo "--------------------------------------------------"
       echo ""
@@ -275,9 +347,7 @@ for repo in */; do
     echo -e "  ${RED}❌ Push failed${RESET}"
 
     {
-      echo ""
       echo "STATUS : FAILED"
-      echo "Reason : Push failed"
       echo "--------------------------------------------------"
       echo ""
     } >> "../$(basename "$REPORT_FILE")"
@@ -300,12 +370,12 @@ done
   echo "=================================================="
   echo "SUMMARY"
   echo "=================================================="
-  echo "Repos Fixed           : $FIXED"
-  echo "Repos Clean           : $CLEAN"
-  echo "Repos Skipped         : $SKIPPED"
-  echo "Repos Failed          : $FAILED"
-  echo "Total Commits Fixed   : $TOTAL_COMMITS_FIXED"
-  echo "Dry Run               : $DRY_RUN"
+  echo "Repos Fixed         : $FIXED"
+  echo "Repos Clean         : $CLEAN"
+  echo "Repos Skipped       : $SKIPPED"
+  echo "Repos Failed        : $FAILED"
+  echo "Total Commits Fixed : $TOTAL_COMMITS_FIXED"
+  echo "Dry Run             : $DRY_RUN"
 } >> "$REPORT_FILE"
 
 echo ""
@@ -319,7 +389,7 @@ echo -e "  ${RED}Failed  : $FAILED${RESET}"
 echo -e "  ${CYAN}Commits Fixed : $TOTAL_COMMITS_FIXED${RESET}"
 
 if [ "$DRY_RUN" = true ]; then
-  echo -e "\n  ${YELLOW}Dry run only — no changes were made.${RESET}"
+  echo -e "\n  ${YELLOW}Dry run only — no changes made.${RESET}"
 fi
 
 echo -e "\n  📄 Report saved to: ${BOLD}$REPORT_FILE${RESET}\n"
