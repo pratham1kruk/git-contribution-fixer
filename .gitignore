@@ -4,3 +4,7 @@ git-contribution-fixer*
 developer_notes.md
 context.md
 .whatson*
+# Report outputs
+*.txt
+*.json
+!README.md
