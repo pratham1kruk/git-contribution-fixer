@@ -1,170 +1,217 @@
-# 🔧 git-identity-fixer
-
-> A DevOps-style toolkit for auditing and fixing Git commit identity across multiple repositories — so your GitHub contributions are always counted correctly.
-
----
-
-## 🚨 The Problem
-
-You commit regularly, but your GitHub contribution graph shows gaps. Your streak is broken. Work that took real effort simply doesn't appear.
-
-**Why?** GitHub only counts a commit as a contribution if the commit's author email **exactly matches** a verified email on your GitHub account.
-
-A common culprit:
+<div align="center">
 
 ```
-hp@RelevantGuy.localdomain   ← local system default, not your GitHub email
+██████╗ ██╗████████╗       ██╗██████╗ ███████╗███╗   ██╗████████╗██╗████████╗██╗   ██╗
+██╔════╝ ██║╚══██╔══╝      ██║██╔══██╗██╔════╝████╗  ██║╚══██╔══╝██║╚══██╔══╝╚██╗ ██╔╝
+██║  ███╗██║   ██║   █████╗██║██║  ██║█████╗  ██╔██╗ ██║   ██║   ██║   ██║    ╚████╔╝
+██║   ██║██║   ██║   ╚════╝██║██║  ██║██╔══╝  ██║╚██╗██║   ██║   ██║   ██║     ╚██╔╝
+╚██████╔╝██║   ██║         ██║██████╔╝███████╗██║ ╚████║   ██║   ██║   ██║      ██║
+ ╚═════╝ ╚═╝   ╚═╝         ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚═╝   ╚═╝      ╚═╝
+                          F  I  X  E  R
 ```
 
-This means:
-- ❌ Commits are ignored by GitHub
-- ❌ Contribution streak breaks
-- ❌ Graph stays empty despite real work
+**Your GitHub contribution graph should reflect your real work.**
+*This toolkit makes sure it does.*
+
+[![Shell](https://img.shields.io/badge/Shell-Bash-89e051?style=flat-square&logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20WSL-2ea44f?style=flat-square)](https://github.com)
+[![GitHub](https://img.shields.io/badge/GitHub-API%20Ready-238636?style=flat-square&logo=github)](https://api.github.com)
+[![License](https://img.shields.io/badge/License-MIT-3fb950?style=flat-square)](LICENSE)
+
+</div>
 
 ---
 
-## 🔍 Root Cause Summary
+## 🟢 The Problem
 
-| Issue | Impact |
-|-------|--------|
-| Commits authored with local system email | Not counted as contributions |
-| Multiple repos pointing to same remote | History mismatch |
-| No global Git identity configured | Wrong email used silently |
-| UTC vs IST timezone offset | Streak day boundaries shift |
+You commit every day. GitHub shows gaps.
 
----
+The reason is almost always one of these:
 
-## 🛠️ What This Toolkit Does
+| Root Cause | Effect on GitHub |
+|---|---|
+| Wrong author email in commits | Commits invisible to your profile |
+| Local system email (`hp@RelevantGuy.localdomain`) | Never counted as contributions |
+| IST commits between 12:00 AM – 5:29 AM | Appear on the **previous** UTC day |
+| Unpushed commits | Never reach GitHub at all |
+| Fork repositories | Contributions may not count |
 
-### 1. `audit_report.sh` — Scan & Report
-- Scans all Git repositories in a given directory
-- Reports email distribution per repo
-- Flags commits made with wrong/unknown emails
-- Saves a timestamped audit report file
-
-### 2. `fix_commits.sh` — Rewrite & Fix
-- Rewrites commit author/committer email across all repos
-- Uses `git filter-branch` to update full history
-- Skips repos that don't belong to your GitHub username
-- Enforces correct global Git config before making any changes
-- Force-pushes corrected history to remote
-
-Both scripts are fully dynamic — no hardcoded paths or emails.
+This toolkit finds all of these, fixes them, and keeps them fixed.
 
 ---
 
-## 🚀 Usage
+## 🟢 What It Does
 
-### Step 1: Audit Your Repos
+```
+┌─────────────────────────────────────────────────────────┐
+│                                                         │
+│   Scan all repos  →  Find bad emails / UTC issues       │
+│         ↓                                               │
+│   Rewrite commit history with correct identity          │
+│         ↓                                               │
+│   Fix near-midnight commits to the right UTC day        │
+│         ↓                                               │
+│   Validate everything  →  Force push to GitHub          │
+│         ↓                                               │
+│   Monitor live via dashboard  →  Stay streak-safe       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+```
 
+---
+
+## 🟢 Scripts at a Glance
+
+| Script | What it does |
+|---|---|
+| `audit_report.sh` | Scans every repo, finds wrong emails, exports TXT + JSON report |
+| `fix_commits.sh` | Rewrites commit history across all repos with the correct email |
+| `fix_timezone.sh` | Shifts near-midnight IST commits to the correct UTC day |
+| `git-contribution-validator.sh` | Full 7-section diagnostic check per repo |
+| `dashboard.sh` | Live terminal dashboard — heatmap, streak safety, repo status |
+
+---
+
+## 🟢 Quick Start
+
+### Step 1 — Audit your repos
 ```bash
 bash audit_report.sh
 ```
+Enter your base directory (e.g. `/mnt/d/git`) and your GitHub email.
+A `.txt` and `.json` report are saved automatically.
 
-You'll be prompted for:
-- Base directory path (e.g. `/mnt/d/git`)
-- Your correct GitHub email
-
-A report file like `repo_email_report_20260429_200000.txt` will be generated.
-
-### Step 2: Fix Commit History
-
+### Step 2 — Fix wrong emails
 ```bash
 bash fix_commits.sh
 ```
+Rewrites commit author/committer email across every repo that needs it.
+Always do a **dry run first** when prompted — it shows what would change without touching anything.
 
-You'll be prompted for:
-- Base directory path
-- Old (wrong) email to replace
-- GitHub username
-- Correct GitHub email
-- Your name
+### Step 3 — Fix timezone boundary commits
+```bash
+bash fix_timezone.sh
+```
+Auto-detects your UTC offset. Shifts commits that fell on the wrong UTC day.
 
-The script will:
-1. Verify/set your global Git config
-2. Scan each repo
-3. Rewrite history where the old email is found
-4. Force-push corrected commits to GitHub
+### Step 4 — Validate
+```bash
+bash git-contribution-validator.sh
+```
+Runs 7 checks per repo: identity, commit emails, branch, push sync, time, contribution stats, and repo integrity.
 
----
-
-## 📋 Requirements
-
-- Git (with `filter-branch` support)
-- Bash shell (Linux / macOS / WSL on Windows)
-- Push access to your GitHub repositories
-
----
-
-## ⚠️ Important Notes
-
-> **Rewriting history is destructive.** This toolkit uses `git push --force`, which rewrites the remote branch. Only run this on repositories you own.
-
-- Collaborators will need to re-clone or rebase after a force push
-- GitHub may take a few minutes to update the contribution graph
-- Streak recovery depends on commit timestamps — past gaps won't be recovered retroactively, but future commits will count correctly
-- UTC timezone affects streak day boundaries; commits near midnight IST may fall on a different UTC date
+### Step 5 — Monitor
+```bash
+bash dashboard.sh
+```
+Live-updating terminal view of all repos, today's commits, streak safety, and GitHub API stats.
 
 ---
 
-## 🔄 Step-by-Step: How the Fix Works
+## 🟢 Dashboard
 
 ```
-1. Identify wrong email in commits
-   └─ git log --pretty=format:"%ae"
+╔══════════════════════════════════════════════════════════════════════════╗
+║  🔧 git-contribution-fixer  DASHBOARD                                        ║
+║     2026-05-11 11:30:00 IST  |  2026-05-11 06:00:00 UTC                 ║
+╚══════════════════════════════════════════════════════════════════════════╝
 
-2. Run audit_report.sh to get a full picture
+  📡 GitHub API — 58/60 requests  |  Push events today: 3
 
-3. Run fix_commits.sh to rewrite history
+  📊 Repository Status
+  REPO                     COMMITS   TODAY   ISSUES   SYNC
+  ──────────────────────────────────────────────────────────
+  my-project               142       2       0        ✓ synced
+  side-project             38        0       3        ↑ ahead
 
-4. git filter-branch rewrites author/committer email
+  🔥 Streak Safety  ✅  2 commits today — streak is safe
 
-5. Force push updated commits to GitHub
+  📅 Last 14 Days
+  Mon   Tue   Wed   Thu   Fri   Sat   Sun  ...
+   ██    ░░    ▓▓    ··    ██    ··    ░░
 
-6. Verify on GitHub profile → Contributions graph
+  [a] audit  [f] fix_commits  [t] fix_timezone  [s] save report  [q] quit  [r] refresh
 ```
 
 ---
 
-## 📁 Project Structure
+## 🟢 Report Output
+
+Every script saves two files on each run:
+
+```
+audit_report_20260511_113000.txt    ← human readable
+audit_report_20260511_113000.json   ← machine readable for CI / dashboards
+```
+
+The JSON report structure:
+```json
+{
+  "meta": { "script": "audit_report", "generated": "2026-05-11T..." },
+  "summary": { "repos_scanned": 20, "wrong_commits_found": 5 },
+  "repos": [
+    { "repo": "my-project", "status": "CLEAN", "total_commits": 142 }
+  ]
+}
+```
+
+---
+
+## 🟢 Requirements
+
+| Tool | Purpose | Required? |
+|---|---|---|
+| `git` | All operations | ✅ Yes |
+| `git-filter-repo` | Rewriting commit history | ✅ For fix scripts |
+| `bash 4+` | Running all scripts | ✅ Yes |
+| `python3` | Timezone fix callback | ✅ For fix_timezone.sh |
+| `curl` | GitHub API calls | ⚡ For API features |
+| `jq` | JSON parsing (auto-install prompted) | ⚡ For API features |
+| `bc` | Prediction percentages | ○ Optional |
+
+Install `git-filter-repo`:
+```bash
+sudo apt install git-filter-repo   # Ubuntu / WSL
+pip install git-filter-repo        # via pip
+```
+
+---
+
+## 🟢 Safety
+
+> ⚠️ **Rewriting history is destructive.** `fix_commits.sh` and `fix_timezone.sh` use `git push --force`.
+
+- Every fix script asks for a **dry run** before making changes
+- Streak safety warning fires before any destructive operation
+- The validator lets you check everything without modifying anything
+- Only run on repositories **you own**
+
+---
+
+## 🟢 Project Structure
 
 ```
 git-contribution-fixer/
-├── audit_report.sh     # Scan repos and generate email audit report
-├── fix_commits.sh      # Rewrite commit history with correct email
-├── .gitignore
-└── .vbcignore
+│
+├── 📋 MAIN SCRIPTS
+│   ├── audit_report.sh              ← scan & report
+│   ├── fix_commits.sh               ← rewrite email history
+│   ├── fix_timezone.sh              ← fix UTC boundary commits
+│   ├── git-contribution-validator.sh← full diagnostics
+│   └── dashboard.sh                 ← live terminal monitor
+│
+└── 🔧 SHARED MODULES (sourced automatically)
+    ├── colors.sh                    ← colored output & print helpers
+    ├── report.sh                    ← TXT + JSON dual report writer
+    ├── github_api.sh                ← GitHub API verification
+    ├── streak.sh                    ← prediction + streak warnings
+    └── utc_analysis.sh              ← auto UTC boundary detection
 ```
 
 ---
 
-## 💡 Key Takeaways
-
-- GitHub contributions are tied to **commit email**, not username
-- Always configure Git identity before your first commit:
-  ```bash
-  git config --global user.email "you@example.com"
-  git config --global user.name "Your Name"
-  ```
-- Rewriting history requires a force push — communicate with collaborators first
-- Automation prevents this issue from recurring
-
----
-
-## 📈 Outcome After Running the Toolkit
-
-- ✅ All commits linked to correct GitHub identity  
-- ✅ Contributions start appearing on your profile  
-- ✅ Consistent, clean repository history  
-- ✅ Global Git config enforced for future commits  
-- ✅ Reusable scripts for ongoing maintenance  
-
----
-
-## 📄 License
+## 🟢 License
 
 MIT — free to use, modify, and share.
 
----
-
-*Built to solve a real-world problem. If this saved your streak, give it a ⭐*
+*Built to solve a real problem. If this saved your streak, give it a* ⭐
